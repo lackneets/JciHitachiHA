@@ -62,7 +62,9 @@ def modules(monkeypatch):
     switch_platform.SwitchEntity = type("SwitchEntity", (), {})
     monkeypatch.setitem(sys.modules, "homeassistant.components.switch", switch_platform)
     sensor_platform = ModuleType("homeassistant.components.sensor")
-    sensor_platform.SensorEntity = type("SensorEntity", (), {})
+    sensor_platform.SensorEntity = type("SensorEntity", (), {
+        "state_class": property(lambda self: getattr(self, "_attr_state_class", None)),
+    })
     sensor_platform.SensorDeviceClass = SimpleNamespace(HUMIDITY="humidity", PM25="pm25", TEMPERATURE="temperature", ENERGY="energy", ENUM="enum")
     sensor_platform.SensorStateClass = SimpleNamespace(MEASUREMENT="measurement", TOTAL="total", TOTAL_INCREASING="total_increasing")
     monkeypatch.setitem(sys.modules, "homeassistant.components.sensor", sensor_platform)
@@ -223,3 +225,91 @@ def test_ac_switch_translation_keys_resolve(modules, context, language, feature,
     translations = json.loads((COMPONENT / "translations" / f"{language}.json").read_text())
     assert entity._attr_translation_key == key
     assert translations["entity"]["switch"][key]["name"].strip()
+
+
+@pytest.mark.parametrize("raw,support,expected", [
+    ({"PM25": 3}, None, 1),
+    ({"PM25": 0}, "unsupported", 1),
+    ({}, 999, 1),
+    ({}, 0, 1),
+    ({}, None, 0),
+    ({}, "unsupported", 0),
+    ({}, True, 0),
+    ({}, -1, 0),
+])
+def test_ac_pm25_requires_reported_field_or_capability(modules, context, raw, support, expected):
+    """Create an AC measurement only when its status or numeric capability advertises PM25."""
+    hass, api, thing, coordinator = context
+    thing.status_code._raw_status = raw
+    thing.support_code.PM25 = support
+    add = MagicMock()
+    asyncio.run(modules.sensor.async_setup_entry(hass, None, add))
+    entities = [entity for call in add.call_args_list for entity in call.args[0]]
+    assert sum(isinstance(entity, modules.sensor.JciHitachiPM25SensorEntity) for entity in entities) == expected
+    api.set_status.assert_not_called()
+
+
+@pytest.mark.parametrize("value", [0, 1, 3, 999])
+def test_actual_sdk_keeps_ac_pm25_measurement_and_legacy_name(modules, value):
+    """The real SDK must preserve zero and positive readings without making PM25 controllable."""
+    from JciHitachi.model import JciHitachiAWSStatus, STATUS_DICT
+
+    state = JciHitachiAWSStatus({"DeviceType": 1, "PM25": value})
+    assert state.PM25 == value
+    assert state.legacy_status.pm25_value == value
+    assert STATUS_DICT["AC"]["PM25"]["controllable"] is False
+    assert STATUS_DICT["AC"]["PM25"]["is_numeric"] is True
+    assert STATUS_DICT["AC"]["PM25"]["legacy_name"] == "pm25_value"
+
+
+@pytest.mark.parametrize("device_type", ["AC", "DH"])
+@pytest.mark.parametrize("value,expected", [
+    (0, 0), (1, 1), (3, 3), (999, 999), (2.5, 2.5),
+    (None, None), (True, None), (False, None), (-1, None),
+    (float("nan"), None), (float("inf"), None), (float("-inf"), None),
+    ("unsupported", None),
+])
+def test_pm25_sensor_preserves_measurements_and_rejects_invalid_values(modules, context, device_type, value, expected):
+    """Both AC and existing DH sensors keep valid readings and never send a control command."""
+    hass, api, thing, coordinator = context
+    thing.type = device_type
+    hass.data["jcihitachi_tw"]["updated_data"] = {thing.name: SimpleNamespace(pm25_value=value)}
+    entity = modules.sensor.JciHitachiPM25SensorEntity(thing, coordinator)
+    entity.hass = hass
+    assert entity.native_value == expected
+    assert entity.device_class == "pm25"
+    assert entity.native_unit_of_measurement == "µg/m³"
+    assert entity.state_class == "measurement"
+    assert entity.unique_id == "offline-id_pm25_sensor"
+    api.set_status.assert_not_called()
+
+
+def test_pm25_sensor_missing_field_stays_unknown(modules, context):
+    """An initial cached payload lacking the new legacy field must not become zero or raise."""
+    hass, api, thing, coordinator = context
+    hass.data["jcihitachi_tw"]["updated_data"] = {thing.name: SimpleNamespace()}
+    entity = modules.sensor.JciHitachiPM25SensorEntity(thing, coordinator)
+    entity.hass = hass
+    assert entity.native_value is None
+    api.set_status.assert_not_called()
+
+
+def test_pm25_registration_keeps_existing_sdk_mapping(modules, monkeypatch):
+    """The PM25 compatibility registration must preserve any future upstream SDK definition."""
+    from JciHitachi.model import STATUS_DICT
+
+    existing = {"controllable": False, "is_numeric": True, "legacy_name": "future_pm25"}
+    monkeypatch.setitem(STATUS_DICT["AC"], "PM25", existing)
+    modules.sensor.__spec__.loader.exec_module(modules.sensor)
+    assert STATUS_DICT["AC"]["PM25"] is existing
+
+
+def test_existing_dh_pm25_sensor_is_still_created(modules, context):
+    """Adding AC support must retain the existing dehumidifier measurement entity."""
+    hass, api, thing, coordinator = context
+    thing.type = "DH"
+    add = MagicMock()
+    asyncio.run(modules.sensor.async_setup_entry(hass, None, add))
+    entities = [entity for call in add.call_args_list for entity in call.args[0]]
+    assert sum(isinstance(entity, modules.sensor.JciHitachiPM25SensorEntity) for entity in entities) == 1
+    api.set_status.assert_not_called()

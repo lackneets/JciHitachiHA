@@ -52,6 +52,7 @@ A home assistant integration for controlling Jci Hitachi devices, using [LibJciH
   - Sleep timer 睡眠計時器 (switch + duration number)
   - Off-state ion cleaning 電離抑菌 (`Ion`, independent switch)
   - Air purification while operating 淨化空氣 (`AirPurifier`, independent switch)
+  - PM2.5 concentration 空氣微粒濃度 (`PM25`, read-only sensor where reported)
   - Freeze clean 凍結洗淨 (switch, **experimental**: verified on one RAD-series family only; a unit may ignore a start it cannot carry out even though the cloud acknowledges it, so check the status code after starting; with a LibJciHitachi version that records it, the switch attributes show the cloud's answer to the last command)
   - Freeze clean status 凍結洗淨狀態 (diagnostic sensor from `CleanStatus`: Idle 待機 / Starting 啟動中 / Cleaning 洗淨中, named from what one RAD-series family reported; other values show as unknown, the raw number is in `raw_value`)
   - Freeze clean notification 凍結洗淨提醒 (binary sensor from the status field `CleanNotification`, shown as "Clean needed" / "Not needed")
@@ -106,6 +107,14 @@ vendor-supported API. Commands reuse the existing authenticated LibJciHitachi
 connection and queue. They do not change power/mode, add credentials, or retry.
 Controls are created only for devices advertising the corresponding capabilities;
 dehumidifier `Ion` is unchanged. Missing or invalid state readings stay unknown.
+
+AC PM2.5 uses the reported `PM25` field without scaling and reuses the existing
+PM2.5 sensor, unit (µg/m³) and device class, with measurement statistics enabled.
+The AC field is registered as read-only for LibJciHitachi 1.7.2. Entities are
+created only when the raw field or numeric capability is present; missing,
+non-numeric, non-finite and negative readings stay unknown. An initial poll may
+be needed after loading the field mapping. A returned zero while powered off
+does not establish that the appliance continues physically measuring the air.
 
 `LibJciHitachi==1.7.2` lacks the AC registry entries. A compatibility mapping
 registers them only if absent; it should be removed when the library supports
