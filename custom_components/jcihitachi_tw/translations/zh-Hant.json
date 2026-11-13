@@ -90,6 +90,12 @@
             }
         },
         "switch": {
+            "ac_ion": {
+                "name": "電離抑菌"
+            },
+            "ac_airpurifier": {
+                "name": "淨化空氣"
+            },
             "air_cleaning_filter": {
                 "name": "空氣清淨濾網設定"
             },

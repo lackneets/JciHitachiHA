@@ -50,6 +50,8 @@ A home assistant integration for controlling Jci Hitachi devices, using [LibJciH
   - Power consumption 用電統計 (supports HA core v2021.9.0+)
   - Monthly power consumption 月用電統計
   - Sleep timer 睡眠計時器 (switch + duration number)
+  - Off-state ion cleaning 電離抑菌 (`Ion`, independent switch)
+  - Air purification while operating 淨化空氣 (`AirPurifier`, independent switch)
   - Freeze clean 凍結洗淨 (switch, **experimental**: verified on one RAD-series family only; a unit may ignore a start it cannot carry out even though the cloud acknowledges it, so check the status code after starting; with a LibJciHitachi version that records it, the switch attributes show the cloud's answer to the last command)
   - Freeze clean status 凍結洗淨狀態 (diagnostic sensor from `CleanStatus`: Idle 待機 / Starting 啟動中 / Cleaning 洗淨中, named from what one RAD-series family reported; other values show as unknown, the raw number is in `raw_value`)
   - Freeze clean notification 凍結洗淨提醒 (binary sensor from the status field `CleanNotification`, shown as "Clean needed" / "Not needed")
@@ -88,6 +90,42 @@ A home assistant integration for controlling Jci Hitachi devices, using [LibJciH
   - ~~PM25 filter notification PM25濾網清潔通知~~ (Only supported by LibJciHitachi)
 
 ## Tested devices
+
+### Review branch: independent AC ion controls
+
+This branch combines the existing translation [PR #127](https://github.com/qqaatw/JciHitachiHA/pull/127)
+and experimental freeze-clean [PR #128](https://github.com/qqaatw/JciHitachiHA/pull/128),
+preserving Tony Tsai's commits and the newer upstream sleep-mode controls.
+The additional ion controls are separate switches, not mutually exclusive climate presets.
+Nothing here is an upstream release or a guarantee that PR #128 works on every model.
+
+The new AC fields are `Ion` (0/1, while off) and `AirPurifier` (0/1, while
+operating). Field names, values and distinct control paths were checked against
+the official Android app 11.30.500. This is protocol analysis, not a published or
+vendor-supported API. Commands reuse the existing authenticated LibJciHitachi
+connection and queue. They do not change power/mode, add credentials, or retry.
+Controls are created only for devices advertising the corresponding capabilities;
+dehumidifier `Ion` is unchanged. Missing or invalid state readings stay unknown.
+
+`LibJciHitachi==1.7.2` lacks the AC registry entries. A compatibility mapping
+registers them only if absent; it should be removed when the library supports
+them natively. The power checks use cached device status and cannot guarantee
+that the device remains eligible when a request arrives. A cloud echo is not
+proof of physical execution; the existing backend may cache it optimistically.
+
+Validation of the added ion protocol: direct cloud `Ion=1` requests were confirmed
+in the official app on RAS-63NT and RAS-28NT; their reported off-state ion cycles
+lasted about 30 minutes. The previously deployed HA ion entities loaded on
+Home Assistant 2026.8.2 and their reported states were checked. HA switch operation
+and `AirPurifier` operation have not been hardware-tested. The combined branch
+has not been deployed. PR #128's freeze-clean observations remain limited to its
+author's RAD-series devices; no NT cleaning phase or multi-split behavior has been
+validated. Follow the exact model's manual before operating a shared outdoor unit.
+
+Run the offline tests with `python -m pip install -r requirements-test.txt`, then
+`python -m pytest -q`. They use the pinned real library, small HA stubs and mocked
+cloud calls, without any credentials or device connection. They check command and
+regression behavior, not physical cycle completion or a full HA runtime.
 
 *Below models have been tested on my side or reported by someone whose device works normally. Unlisted models DO NOT MEAN they are not supported.*
 

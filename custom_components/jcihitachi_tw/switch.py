@@ -3,10 +3,19 @@ import datetime
 import logging
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.exceptions import HomeAssistantError
+from JciHitachi.model import STATUS_DICT
 
 from . import API, COORDINATOR, DOMAIN, UPDATED_DATA, JciHitachiEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+# The official AC app defines these as 0/1 fields with range-based capability data.
+# shortcut: LibJciHitachi 1.7.2 omits these AC fields; remove after upstream support.
+for field in ("Ion", "AirPurifier"):
+    STATUS_DICT["AC"].setdefault(
+        field, {"controllable": True, "is_numeric": True, "legacy_name": None}
+    )
 
 
 async def _async_setup(hass, async_add):
@@ -15,6 +24,13 @@ async def _async_setup(hass, async_add):
 
     for thing in api.things.values():
         if thing.type == "AC":
+            entities = []
+            for field, label, power in (("Ion", "電離抑菌", "off"),
+                                        ("AirPurifier", "淨化空氣", "on")):
+                supported = getattr(thing.support_code, field, None)
+                if type(supported) is int and supported >= 1:
+                    entities.append(JciHitachiACIonFeatureSwitch(thing, coordinator, field, label, power))
+            async_add(entities)
             async_add([JciHitachiFreezeCleanSwitchEntity(thing, coordinator)],
                       update_before_add=True)
             if getattr(thing.support_code, "SleepModeRemainingTime", "unsupported") != "unsupported":
@@ -38,6 +54,41 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 async def async_setup_entry(hass, config_entry, async_add_devices):
     """Set up the switch platform from a config entry."""
     await _async_setup(hass, async_add_devices)
+
+
+class JciHitachiACIonFeatureSwitch(JciHitachiEntity, SwitchEntity):
+    """Send the official AC Ion/AirPurifier fields through the existing command queue."""
+
+    def __init__(self, thing, coordinator, field, label, required_power):
+        super().__init__(thing, coordinator)
+        self._field, self._label, self._required_power = field, label, required_power
+        self._attr_translation_key = f"ac_{field.lower()}"
+
+    @property
+    def unique_id(self):
+        return f"{self._thing.gateway_mac_address}_ac_{self._field.lower()}_switch"
+
+    @property
+    def is_on(self):
+        """Return the reported numeric field, preserving missing or invalid values as unknown."""
+        status = self.hass.data[DOMAIN][UPDATED_DATA].get(self._thing.name)
+        value = getattr(status, self._field, None)
+        return bool(value) if type(value) is int and value in (0, 1) else None
+
+    def _send(self, value):
+        """Send once in the required power state; the official app verifies actual execution."""
+        if not self._thing.available or self._thing.status_code.Switch != self._required_power:
+            raise HomeAssistantError(f"冷氣狀態不符合{self._label}的操作條件，未送出指令。")
+        self.put_queue(status_name=self._field, status_value=value)
+        self.update()
+
+    def turn_on(self, **kwargs):
+        """Request the official feature's on value without retries or a power-mode change."""
+        self._send(1)
+
+    def turn_off(self, **kwargs):
+        """Request the official feature's off value without retries or a power-mode change."""
+        self._send(0)
 
 
 class JciHitachiAirCleaningFilterEntity(JciHitachiEntity, SwitchEntity):

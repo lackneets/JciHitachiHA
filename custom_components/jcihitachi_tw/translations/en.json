@@ -90,6 +90,12 @@
             }
         },
         "switch": {
+            "ac_ion": {
+                "name": "Off-state Ion Cleaning"
+            },
+            "ac_airpurifier": {
+                "name": "Air Purification"
+            },
             "air_cleaning_filter": {
                 "name": "Air Cleaning Filter Setting"
             },
