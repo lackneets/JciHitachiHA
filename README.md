@@ -50,8 +50,8 @@ A home assistant integration for controlling Jci Hitachi devices, using [LibJciH
   - Power consumption 用電統計 (supports HA core v2021.9.0+)
   - Monthly power consumption 月用電統計
   - Sleep timer 睡眠計時器 (switch + duration number)
-  - Off-state ion cleaning 電離抑菌 (`Ion`, independent switch)
-  - Air purification while operating 淨化空氣 (`AirPurifier`, independent switch)
+  - Ion Antibacterial Treatment 電離抑菌 (`Ion`, independent switch)
+  - Ion Air Purification 電離淨化空氣 (`AirPurifier`, independent switch)
   - PM2.5 concentration 空氣微粒濃度 (`PM25`, read-only sensor where reported)
   - Freeze clean 凍結洗淨 (switch, **experimental**: verified on one RAD-series family only; a unit may ignore a start it cannot carry out even though the cloud acknowledges it, so check the status code after starting; with a LibJciHitachi version that records it, the switch attributes show the cloud's answer to the last command)
   - Freeze clean status 凍結洗淨狀態 (diagnostic sensor from `CleanStatus`: Idle 待機 / Starting 啟動中 / Cleaning 洗淨中, named from what one RAD-series family reported; other values show as unknown, the raw number is in `raw_value`)

@@ -26,7 +26,7 @@ async def _async_setup(hass, async_add):
         if thing.type == "AC":
             entities = []
             for field, label, power in (("Ion", "電離抑菌", "off"),
-                                        ("AirPurifier", "淨化空氣", "on")):
+                                        ("AirPurifier", "電離淨化空氣", "on")):
                 supported = getattr(thing.support_code, field, None)
                 if type(supported) is int and supported >= 1:
                     entities.append(JciHitachiACIonFeatureSwitch(thing, coordinator, field, label, power))

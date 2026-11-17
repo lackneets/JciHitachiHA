@@ -91,10 +91,10 @@
         },
         "switch": {
             "ac_ion": {
-                "name": "Off-state Ion Cleaning"
+                "name": "Ion Antibacterial Treatment"
             },
             "ac_airpurifier": {
-                "name": "Air Purification"
+                "name": "Ion Air Purification"
             },
             "air_cleaning_filter": {
                 "name": "Air Cleaning Filter Setting"

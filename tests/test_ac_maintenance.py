@@ -219,12 +219,16 @@ def test_original_freeze_sensor_preserves_enum_and_raw_value(modules, context, c
 @pytest.mark.parametrize("language", ["en", "zh-Hant"])
 @pytest.mark.parametrize("feature,power,key", [("Ion", "off", "ac_ion"), ("AirPurifier", "on", "ac_airpurifier")])
 def test_ac_switch_translation_keys_resolve(modules, context, language, feature, power, key):
-    """Both shipped languages must define a nonempty name for each entity's translation key."""
+    """Keep official Chinese wording and its documented English translation."""
     hass, api, thing, coordinator = context
     entity = modules.switch.JciHitachiACIonFeatureSwitch(thing, coordinator, feature, feature, power)
     translations = json.loads((COMPONENT / "translations" / f"{language}.json").read_text())
     assert entity._attr_translation_key == key
-    assert translations["entity"]["switch"][key]["name"].strip()
+    expected = {
+        "en": {"ac_ion": "Ion Antibacterial Treatment", "ac_airpurifier": "Ion Air Purification"},
+        "zh-Hant": {"ac_ion": "電離抑菌", "ac_airpurifier": "電離淨化空氣"},
+    }
+    assert translations["entity"]["switch"][key]["name"] == expected[language][key]
 
 
 @pytest.mark.parametrize("raw,support,expected", [
